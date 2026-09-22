@@ -1,4 +1,5 @@
-data/*.bin
+data/*
 *.o
 bd
+test_all
 build/

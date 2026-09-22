@@ -8,3 +8,4 @@ struct KMeansResult {
 };
 
 KMeansResult kmeans(const std::vector<Vec>& data, int k, int max_iters = 50, unsigned seed = 42);
+int closest_centroid(const Vec& point, const std::vector<Vec>& centroids);

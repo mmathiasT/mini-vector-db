@@ -1,7 +1,9 @@
 #include "ivf.h"
 #include "kmeans.h"
 #include "knn.h"
+#include "io.h"
 #include <algorithm>
+#include <fstream>
 #include <utility>
 
 IVFIndex build_ivf_index(const std::vector<Vec>& data, int nlist, int max_iters, unsigned seed) {
@@ -44,4 +46,65 @@ std::vector<int> ivf_search(const IVFIndex& index, const Vec& query, int k, int 
     }
 
     return brute_force_knn(query, candidates, k);
+}
+
+void ivf_insert(IVFIndex& index, const Vec& new_vector) {
+    int closest_centroid_index = closest_centroid(new_vector, index.centroids);
+    
+    index.data.push_back(new_vector);
+
+    index.inverted_lists[closest_centroid_index].push_back(index.data.size() - 1);
+}
+
+void save_ivf_index(const std::string& path, const IVFIndex& index) {
+    save_vectors(path + ".centroids", index.centroids);
+    save_vectors(path + ".data", index.data);
+
+    std::string path_inverted_list = path + ".inverted_lists";
+
+    std::ofstream out(path_inverted_list, std::ios::binary);
+
+    int num_lists = index.inverted_lists.size();
+    out.write(reinterpret_cast<const char*>(&num_lists), sizeof(num_lists));
+
+    for(size_t i = 0; i < index.inverted_lists.size(); i++) {
+        int num_list_i = index.inverted_lists[i].size();
+        out.write(reinterpret_cast<const char*>(&num_list_i), sizeof(num_list_i));
+
+        for(int j = 0; j < num_list_i; j++) {
+            int x = index.inverted_lists[i][j];
+            out.write(reinterpret_cast<const char*>(&x), sizeof(x));
+        }   
+    }
+}
+
+IVFIndex load_ivf_index(const std::string& path) {
+    IVFIndex ivf_index;
+
+    std::string path_centroids = path + ".centroids";
+    std::string path_data = path + ".data";
+
+    ivf_index.centroids = load_vectors(path_centroids);
+    ivf_index.data = load_vectors(path_data);
+
+    std::string path_inverted_lists = path + ".inverted_lists";
+    std::ifstream in(path_inverted_lists, std::ios::binary);
+
+    int num_lists = 0;
+    in.read(reinterpret_cast<char*>(&num_lists), sizeof(num_lists));
+
+    ivf_index.inverted_lists.resize(num_lists);
+
+    for(int i = 0; i < num_lists; i++) {
+        int num_list_i = 0;
+        in.read(reinterpret_cast<char*>(&num_list_i), sizeof(num_list_i));
+
+        for(int j = 0; j < num_list_i; j++) {
+            int next_num;
+            in.read(reinterpret_cast<char*>(&next_num), sizeof(next_num));
+            ivf_index.inverted_lists[i].push_back(next_num);
+        }
+    }
+
+    return ivf_index;
 }

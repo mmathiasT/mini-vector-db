@@ -4,7 +4,7 @@
 #include <limits>
 #include <stdexcept>
 
-static int nearest_centroid(const Vec& point, const std::vector<Vec>& centroids) {
+int closest_centroid(const Vec& point, const std::vector<Vec>& centroids) {
     int closest_centroid_idx = 0;
     float min_distance = std::numeric_limits<float>::max();
 
@@ -53,7 +53,7 @@ KMeansResult kmeans(const std::vector<Vec>& data, int k, int max_iters, unsigned
 
     while (max_iters--) {
         for (size_t i = 0; i < data.size(); i++) {
-            assignments[i] = nearest_centroid(data[i], centroids);
+            assignments[i] = closest_centroid(data[i], centroids);
             clusters[assignments[i]].push_back(i);
         }
 
