@@ -1,5 +1,6 @@
 data/*
 *.o
 bd
+server
 test_all
 build/
