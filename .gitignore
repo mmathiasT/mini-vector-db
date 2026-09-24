@@ -1,6 +1,6 @@
 data/*
 *.o
-bd
+mini_vector_db
 server
 client
 bench
