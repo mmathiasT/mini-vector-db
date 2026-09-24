@@ -21,17 +21,17 @@ Built as a learning project to understand the mechanics behind real vector datab
 
 ```
 src/
-├── vector.h/.cpp    — Vec struct, distance functions, random vector generation
-├── knn.h/.cpp        — brute-force k-NN (ground truth baseline)
+├── vector.h/.cpp      — Vec struct, distance functions, random vector generation
+├── knn.h/.cpp         — brute-force k-NN (ground truth baseline)
 ├── io.h/.cpp          — binary save/load for raw vectors
-├── kmeans.h/.cpp    — k-means clustering
+├── kmeans.h/.cpp      — k-means clustering
 ├── ivf.h/.cpp         — IVF index: build, search, insert, delete, persistence
-├── server.h/.cpp    — TCP server (QUERY / INSERT protocol)
-├── server_main.cpp   — starts the server with a built IVF index
+├── server.h/.cpp      — TCP server (QUERY / INSERT protocol)
+├── server_main.cpp    — starts the server with a built IVF index
 ├── client.cpp         — standalone CLI client
-├── bench.cpp           — recall/speed benchmark
-└── main.cpp             — I/O sanity check
-tests/test_all.cpp    — end-to-end test suite
+├── bench.cpp          — recall/speed benchmark
+└── main.cpp           — I/O sanity check
+tests/test_all.cpp     — end-to-end test suite
 ```
 
 ## How IVF search works
@@ -95,8 +95,8 @@ The server accepts one command per TCP connection, as a single newline-terminate
 
 ```
 QUERY <dim floats> <k> <nprobe>   -> space-separated list of nearest neighbor ids
-INSERT <dim floats>                 -> "OK"
-DELETE <id>                           -> "OK" or "NOT FOUND"
+INSERT <dim floats>               -> "OK"
+DELETE <id>                       -> "OK" or "NOT FOUND"
 ```
 
 ## Known simplifications
