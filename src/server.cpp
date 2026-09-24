@@ -113,6 +113,16 @@ void run_server(IVFIndex& ivf_index, int port) {
             std::string response = "OK\n";
             write(client_file_descriptor, response.c_str(), response.size());
         }
+        else if (command == "DELETE") {
+            std::cout << "DELETE" << std::endl;
+            int id;
+            iss >> id;
+
+            bool deleted = ivf_delete(ivf_index, id);
+
+            std::string response = deleted ? "OK\n" : "NOT FOUND\n";
+            write(client_file_descriptor, response.c_str(), response.size());
+        }
 
         close(client_file_descriptor);
     }

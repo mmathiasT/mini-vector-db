@@ -128,6 +128,48 @@ void test_ivf_index_save_load_roundtrip() {
     std::cout << "test_ivf_index_save_load_roundtrip OK\n";
 }
 
+void test_ivf_delete_excludes_from_search() {
+    std::vector<Vec> data = generate_random_vectors(500, 8);
+    IVFIndex index = build_ivf_index(data, 10);
+
+    int target_id = data[0].id;
+    Vec query = data[0];
+
+    auto before = ivf_search(index, query, 5, 10);
+    bool found_before = std::find(before.begin(), before.end(), target_id) != before.end();
+
+    bool deleted = ivf_delete(index, target_id);
+    bool deleted_again = ivf_delete(index, 999999);
+
+    auto after = ivf_search(index, query, 5, 10);
+    bool found_after = std::find(after.begin(), after.end(), target_id) != after.end();
+
+    assert(found_before);
+    assert(deleted);
+    assert(!deleted_again);
+    assert(!found_after);
+    std::cout << "test_ivf_delete_excludes_from_search OK\n";
+}
+
+void test_ivf_delete_persists() {
+    std::vector<Vec> data = generate_random_vectors(500, 8);
+    IVFIndex index = build_ivf_index(data, 10);
+
+    int target_id = data[0].id;
+    ivf_delete(index, target_id);
+
+    save_ivf_index("data/test_delete_persist", index);
+    IVFIndex loaded = load_ivf_index("data/test_delete_persist");
+
+    assert(index.deleted == loaded.deleted);
+
+    Vec query = data[0];
+    auto result = ivf_search(loaded, query, 5, 10);
+    bool found = std::find(result.begin(), result.end(), target_id) != result.end();
+    assert(!found);
+    std::cout << "test_ivf_delete_persists OK\n";
+}
+
 int main() {
     test_squared_l2();
     test_cosine_similarity();
@@ -136,6 +178,8 @@ int main() {
     test_kmeans_separates_clusters();
     test_ivf_full_nprobe_matches_brute_force();
     test_ivf_insert_is_searchable();
+    test_ivf_delete_excludes_from_search();
+    test_ivf_delete_persists();
     test_ivf_index_save_load_roundtrip();
 
     std::cout << "\n All tests passed\n";

@@ -39,3 +39,28 @@ std::vector<Vec> load_vectors(const std::string& path) {
     }
     return result;
 }
+
+void save_bool_vector(const std::string& path, const std::vector<bool>& vector) {
+    std::ofstream out(path, std::ios::binary);
+
+    for (bool x : vector) {
+        out.write(reinterpret_cast<const char*>(&x), sizeof(x));
+    }
+}
+
+std::vector<bool> load_bool_vector(const std::string& path) {
+    std::vector<bool> result;
+    std::ifstream in(path, std::ios::binary);
+
+    while (true) {
+        bool x;
+        in.read(reinterpret_cast<char*>(&x), sizeof(x));
+
+        if (!in) {
+            break;
+        }
+
+        result.push_back(x);
+    }
+    return result;
+}

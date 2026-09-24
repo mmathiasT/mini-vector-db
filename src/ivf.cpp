@@ -13,6 +13,7 @@ IVFIndex build_ivf_index(const std::vector<Vec>& data, int nlist, int max_iters,
     index.centroids = kmeans_result.centroids;
     index.data = data;
     std::vector<std::vector<int>> inv_list(nlist);
+    index.deleted = std::vector<bool>(data.size(), false);
 
     for (size_t i = 0; i < data.size(); i++) {
         int cluster = kmeans_result.assignments[i];
@@ -41,7 +42,9 @@ std::vector<int> ivf_search(const IVFIndex& index, const Vec& query, int k, int 
     for (int centroid_id : closest_centroids) {
         for (size_t j = 0; j < index.inverted_lists[centroid_id].size(); j++) {
             int vector_idx = index.inverted_lists[centroid_id][j];
-            candidates.push_back(vector_idx);
+            if (!index.deleted[vector_idx]) {
+                candidates.push_back(vector_idx);
+            }
         }
     }
 
@@ -52,6 +55,7 @@ void ivf_insert(IVFIndex& index, const Vec& new_vector) {
     int closest_centroid_index = closest_centroid(new_vector, index.centroids);
     
     index.data.push_back(new_vector);
+    index.deleted.push_back(false);
 
     index.inverted_lists[closest_centroid_index].push_back(index.data.size() - 1);
 }
@@ -59,6 +63,7 @@ void ivf_insert(IVFIndex& index, const Vec& new_vector) {
 void save_ivf_index(const std::string& path, const IVFIndex& index) {
     save_vectors(path + ".centroids", index.centroids);
     save_vectors(path + ".data", index.data);
+    save_bool_vector(path + ".deleted", index.deleted);
 
     std::string path_inverted_list = path + ".inverted_lists";
 
@@ -83,9 +88,11 @@ IVFIndex load_ivf_index(const std::string& path) {
 
     std::string path_centroids = path + ".centroids";
     std::string path_data = path + ".data";
+    std::string path_deleted = path + ".deleted";
 
     ivf_index.centroids = load_vectors(path_centroids);
     ivf_index.data = load_vectors(path_data);
+    ivf_index.deleted = load_bool_vector(path_deleted);
 
     std::string path_inverted_lists = path + ".inverted_lists";
     std::ifstream in(path_inverted_lists, std::ios::binary);
@@ -107,4 +114,14 @@ IVFIndex load_ivf_index(const std::string& path) {
     }
 
     return ivf_index;
+}
+
+bool ivf_delete(IVFIndex& ivf_index, int id) {
+    for(size_t i = 0; i < ivf_index.data.size(); i++) {
+        if(ivf_index.data[i].id == id) {
+            ivf_index.deleted[i] = true;
+            return true;
+        }
+    }
+    return false;
 }

@@ -11,10 +11,11 @@ Built as a learning project to understand the mechanics behind real vector datab
 - K-means clustering implemented from scratch (Lloyd's algorithm)
 - IVF index: cluster-based approximate nearest neighbor search with a configurable `nprobe`
 - Insert into an existing index without rebuilding
-- Binary persistence (save/load) for both raw vectors and the full IVF index
-- TCP server + CLI client — query and insert over the network with a simple text protocol
+- Tombstone-based delete (marks vectors as deleted and excludes them from search, without shifting indices)
+- Binary persistence (save/load) for both raw vectors and the full IVF index, including delete flags
+- TCP server + CLI client — query, insert, and delete over the network with a simple text protocol
 - Benchmark suite measuring recall and speedup vs brute-force
-- 8 automated tests covering the whole pipeline
+- 10 automated tests covering the whole pipeline
 
 ## Architecture
 
@@ -24,7 +25,7 @@ src/
 ├── knn.h/.cpp        — brute-force k-NN (ground truth baseline)
 ├── io.h/.cpp          — binary save/load for raw vectors
 ├── kmeans.h/.cpp    — k-means clustering
-├── ivf.h/.cpp         — IVF index: build, search, insert, persistence
+├── ivf.h/.cpp         — IVF index: build, search, insert, delete, persistence
 ├── server.h/.cpp    — TCP server (QUERY / INSERT protocol)
 ├── server_main.cpp   — starts the server with a built IVF index
 ├── client.cpp         — standalone CLI client
@@ -85,6 +86,7 @@ Server + client demo:
 ./server &
 ./client QUERY 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 5 3
 ./client INSERT 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8
+./client DELETE 0
 ```
 
 ## Protocol
@@ -94,6 +96,7 @@ The server accepts one command per TCP connection, as a single newline-terminate
 ```
 QUERY <dim floats> <k> <nprobe>   -> space-separated list of nearest neighbor ids
 INSERT <dim floats>                 -> "OK"
+DELETE <id>                           -> "OK" or "NOT FOUND"
 ```
 
 ## Known simplifications
@@ -103,4 +106,4 @@ This is a learning project, not a production system. Deliberately left out:
 - No authentication or encryption on the server — anyone who can reach the port can query/insert
 - Single-threaded server — one client handled at a time
 - No index rebuild/rebalancing after inserts — cluster quality degrades slowly as more vectors are added without a corresponding centroid update
-- No delete operation
+- Delete is a tombstone flag, not physical removal — deleted vectors still occupy memory and disk space; there's no compaction to reclaim it
