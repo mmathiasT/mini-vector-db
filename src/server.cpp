@@ -43,10 +43,11 @@ void run_server(IVFIndex& ivf_index, int port) {
 
     sockaddr_in address;
     memset(&address, 0, sizeof(address));
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(port);
+    address.sin_family = AF_INET;           // Use IPv4 addressing.
+    address.sin_addr.s_addr = INADDR_ANY;   // Listen on all available network interfaces, not just one.
+    address.sin_port = htons(port);         // Convert the port number to network byte order.
 
+    // Associate the socket with the address/port configured above.
     if (bind(server_file_descriptor, (sockaddr*)&address, sizeof(address)) == -1) {
         std::cout << "bind() failed - port might already be in use" << std::endl;
         return;

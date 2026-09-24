@@ -14,8 +14,8 @@ int main() {
         return 1;
     }
 
-    std::vector<int> result_original = brute_force_knn(original[0], original, 5);
-    std::vector<int> result_loaded   = brute_force_knn(loaded[0], loaded, 5);
+    std::vector<int> result_original = brute_force_knn(original[0], original, all_indices(original.size()), 5);
+    std::vector<int> result_loaded   = brute_force_knn(loaded[0], loaded, all_indices(loaded.size()), 5);
 
     if (result_original == result_loaded) {
         std::cout << "OK\n";

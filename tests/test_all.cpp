@@ -27,7 +27,7 @@ void test_cosine_similarity() {
 
 void test_brute_force_knn_finds_self() {
     std::vector<Vec> data = generate_random_vectors(200, 16);
-    auto result = brute_force_knn(data[0], data, 1);
+    auto result = brute_force_knn(data[0], data, all_indices(data.size()), 1);
     assert(result.size() == 1);
     assert(result[0] == data[0].id);
     std::cout << "test_brute_force_knn_finds_self OK\n";
@@ -39,8 +39,8 @@ void test_save_load_vectors_roundtrip() {
     std::vector<Vec> loaded = load_vectors("data/test_vectors.bin");
 
     assert(loaded.size() == original.size());
-    auto r1 = brute_force_knn(original[0], original, 5);
-    auto r2 = brute_force_knn(loaded[0], loaded, 5);
+    auto r1 = brute_force_knn(original[0], original, all_indices(original.size()), 5);
+    auto r2 = brute_force_knn(loaded[0], loaded, all_indices(loaded.size()), 5);
     assert(r1 == r2);
     std::cout << "test_save_load_vectors_roundtrip OK\n";
 }
@@ -81,7 +81,7 @@ void test_ivf_full_nprobe_matches_brute_force() {
     Vec query = data[0];
     int k = 5;
 
-    auto exact = brute_force_knn(query, data, k);
+    auto exact = brute_force_knn(query, data, all_indices(data.size()), k);
     auto approx = ivf_search(index, query, k, /*nprobe=*/10);
 
     std::sort(exact.begin(), exact.end());

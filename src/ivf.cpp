@@ -37,15 +37,15 @@ std::vector<int> ivf_search(const IVFIndex& index, const Vec& query, int k, int 
         closest_centroids.push_back(all_centroids[i].second);
     }
 
-    std::vector<Vec> candidates;
+    std::vector<int> candidates;
     for (int centroid_id : closest_centroids) {
         for (size_t j = 0; j < index.inverted_lists[centroid_id].size(); j++) {
             int vector_idx = index.inverted_lists[centroid_id][j];
-            candidates.push_back(index.data[vector_idx]);
+            candidates.push_back(vector_idx);
         }
     }
 
-    return brute_force_knn(query, candidates, k);
+    return brute_force_knn(query, index.data, candidates, k);
 }
 
 void ivf_insert(IVFIndex& index, const Vec& new_vector) {

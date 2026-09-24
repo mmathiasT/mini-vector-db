@@ -2,5 +2,7 @@ data/*
 *.o
 bd
 server
+client
+bench
 test_all
 build/
