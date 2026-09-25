@@ -12,10 +12,11 @@ Built as a learning project to understand the mechanics behind real vector datab
 - IVF index: cluster-based approximate nearest neighbor search with a configurable `nprobe`
 - Insert into an existing index without rebuilding
 - Tombstone-based delete (marks vectors as deleted and excludes them from search, without shifting indices)
+- Automatic index rebuild: triggers every time ~20% new inserts accumulate, re-running k-means on the live (non-deleted) data to keep cluster quality from degrading and to reclaim space from deleted vectors
 - Binary persistence (save/load) for both raw vectors and the full IVF index, including delete flags
 - TCP server + CLI client — query, insert, and delete over the network with a simple text protocol
 - Benchmark suite measuring recall and speedup vs brute-force
-- 10 automated tests covering the whole pipeline
+- 12 automated tests covering the whole pipeline
 
 ## Architecture
 
@@ -25,7 +26,7 @@ src/
 ├── knn.h/.cpp         — brute-force k-NN (ground truth baseline)
 ├── io.h/.cpp          — binary save/load for raw vectors
 ├── kmeans.h/.cpp      — k-means clustering
-├── ivf.h/.cpp         — IVF index: build, search, insert, delete, persistence
+├── ivf.h/.cpp         — IVF index: build, search, insert, delete, rebuild, persistence
 ├── server.h/.cpp      — TCP server (QUERY / INSERT protocol)
 ├── server_main.cpp    — starts the server with a built IVF index
 ├── client.cpp         — standalone CLI client
@@ -40,6 +41,10 @@ tests/test_all.cpp     — end-to-end test suite
 2. **Query**: compute the distance from the query to all centroids, pick the `nprobe` closest clusters, then brute-force search only within those clusters.
 
 This trades exactness for speed: a smaller `nprobe` means fewer clusters are searched (faster), but the true nearest neighbor might live in a cluster that wasn't checked (lower recall). Setting `nprobe = nlist` searches every cluster and is mathematically equivalent to brute-force.
+
+### Automatic rebuild
+
+Inserting doesn't touch the centroids, so cluster quality slowly degrades as more vectors are added — and deleted vectors keep occupying space until something removes them. `ivf_insert` tracks how many inserts have happened since the last rebuild and, once that reaches ~20% of the current dataset size, calls `ivf_rebuild`: it collects all non-deleted vectors and reruns `build_ivf_index` from scratch, producing fresh centroids and dropping tombstoned vectors entirely. A full rebuild costs `O(max_iters × N × nlist)` (same as the initial build), so it's deliberately infrequent rather than run on every insert.
 
 ## Benchmark results
 
@@ -105,5 +110,5 @@ This is a learning project, not a production system. Deliberately left out:
 
 - No authentication or encryption on the server — anyone who can reach the port can query/insert
 - Single-threaded server — one client handled at a time
-- No index rebuild/rebalancing after inserts — cluster quality degrades slowly as more vectors are added without a corresponding centroid update
-- Delete is a tombstone flag, not physical removal — deleted vectors still occupy memory and disk space; there's no compaction to reclaim it
+- Delete is a tombstone flag between rebuilds, not immediate physical removal — space is only reclaimed at the next automatic (or manual) rebuild
+- Rebuild threshold (~20% growth) is a fixed heuristic, not configurable or adaptive to workload

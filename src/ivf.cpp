@@ -53,11 +53,20 @@ std::vector<int> ivf_search(const IVFIndex& index, const Vec& query, int k, int 
 
 void ivf_insert(IVFIndex& index, const Vec& new_vector) {
     int closest_centroid_index = closest_centroid(new_vector, index.centroids);
-    
+
     index.data.push_back(new_vector);
     index.deleted.push_back(false);
 
     index.inverted_lists[closest_centroid_index].push_back(index.data.size() - 1);
+
+    index.inserts_since_rebuild++;
+
+    int threshold = std::max(10, static_cast<int>(index.data.size()) / 5);
+    if (index.inserts_since_rebuild >= threshold) {
+        int nlist = static_cast<int>(index.centroids.size());
+        index = ivf_rebuild(index, nlist);
+        index.inserts_since_rebuild = 0;
+    }
 }
 
 void save_ivf_index(const std::string& path, const IVFIndex& index) {
@@ -124,4 +133,14 @@ bool ivf_delete(IVFIndex& ivf_index, int id) {
         }
     }
     return false;
+}
+
+IVFIndex ivf_rebuild(const IVFIndex& index, int nlist, int max_iters, unsigned seed) {
+    std::vector<Vec> live_data;
+    for (size_t i = 0; i < index.data.size(); i++) {
+        if (!index.deleted[i]) {
+            live_data.push_back(index.data[i]);
+        }
+    }
+    return build_ivf_index(live_data, nlist, max_iters, seed);
 }

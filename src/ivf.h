@@ -8,6 +8,7 @@ struct IVFIndex {
     std::vector<std::vector<int>> inverted_lists;
     std::vector<Vec> data;
     std::vector<bool> deleted;
+    int inserts_since_rebuild = 0;
 };
 
 IVFIndex build_ivf_index(const std::vector<Vec>& data, int nlist, int max_iters = 50, unsigned seed = 42);
@@ -16,3 +17,4 @@ void ivf_insert(IVFIndex& index, const Vec& new_vector);
 bool ivf_delete(IVFIndex& index, int id);
 void save_ivf_index(const std::string& path, const IVFIndex& index);
 IVFIndex load_ivf_index(const std::string& path);
+IVFIndex ivf_rebuild(const IVFIndex& index, int nlist, int max_iters = 50, unsigned seed = 42);

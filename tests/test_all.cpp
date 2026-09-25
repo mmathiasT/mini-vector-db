@@ -170,6 +170,49 @@ void test_ivf_delete_persists() {
     std::cout << "test_ivf_delete_persists OK\n";
 }
 
+void test_ivf_rebuild_removes_deleted() {
+    std::vector<Vec> data = generate_random_vectors(200, 8, /*seed=*/1);
+    IVFIndex index = build_ivf_index(data, 5);
+
+    ivf_delete(index, data[0].id);
+    ivf_delete(index, data[1].id);
+    assert(index.data.size() == 200);
+
+    IVFIndex rebuilt = ivf_rebuild(index, 5);
+
+    assert(rebuilt.data.size() == 198);
+    assert(rebuilt.centroids.size() == 5);
+    std::cout << "test_ivf_rebuild_removes_deleted OK\n";
+}
+
+void test_ivf_auto_rebuild_stays_searchable() {
+    std::vector<Vec> data = generate_random_vectors(100, 8, /*seed=*/2);
+    IVFIndex index = build_ivf_index(data, 5);
+
+    bool rebuild_happened = false;
+    for (int i = 0; i < 30; i++) {
+        Vec v;
+        v.id = 1000 + i;
+        v.data = generate_random_vectors(1, 8, /*seed=*/1000 + i)[0].data;
+        int before = index.inserts_since_rebuild;
+        ivf_insert(index, v);
+        if (index.inserts_since_rebuild < before) rebuild_happened = true;
+    }
+
+    Vec target;
+    target.id = 99999;
+    target.data = data[0].data;
+    ivf_insert(index, target);
+
+    auto result = ivf_search(index, target, 3, 5);
+    bool found = std::find(result.begin(), result.end(), 99999) != result.end();
+
+    assert(rebuild_happened);
+    assert(found);
+    assert(index.centroids.size() == 5);
+    std::cout << "test_ivf_auto_rebuild_stays_searchable OK\n";
+}
+
 int main() {
     test_squared_l2();
     test_cosine_similarity();
@@ -180,6 +223,8 @@ int main() {
     test_ivf_insert_is_searchable();
     test_ivf_delete_excludes_from_search();
     test_ivf_delete_persists();
+    test_ivf_rebuild_removes_deleted();
+    test_ivf_auto_rebuild_stays_searchable();
     test_ivf_index_save_load_roundtrip();
 
     std::cout << "\n All tests passed\n";
