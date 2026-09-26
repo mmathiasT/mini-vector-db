@@ -6,3 +6,8 @@ client
 bench
 test_all
 build/
+tools/checkpoints/
+tools/embeddings.bin
+tools/unique_words.txt
+tools/__pycache__/
+gpt_search_server
