@@ -6,13 +6,13 @@
 #include <fstream>
 #include <utility>
 
-IVFIndex build_ivf_index(const std::vector<Vec>& data, int nlist, int max_iters, unsigned seed) {
-    KMeansResult kmeans_result = kmeans(data, nlist, max_iters, seed);
+IVFIndex build_ivf_index(const std::vector<Vec>& data, int cluster_count, int max_iters, unsigned seed) {
+    KMeansResult kmeans_result = kmeans(data, cluster_count, max_iters, seed);
 
     IVFIndex index;
     index.centroids = kmeans_result.centroids;
     index.data = data;
-    std::vector<std::vector<int>> inv_list(nlist);
+    std::vector<std::vector<int>> inv_list(cluster_count);
     index.deleted = std::vector<bool>(data.size(), false);
 
     for (size_t i = 0; i < data.size(); i++) {
@@ -63,8 +63,8 @@ void ivf_insert(IVFIndex& index, const Vec& new_vector) {
 
     int threshold = std::max(10, static_cast<int>(index.data.size()) / 5);
     if (index.inserts_since_rebuild >= threshold) {
-        int nlist = static_cast<int>(index.centroids.size());
-        index = ivf_rebuild(index, nlist);
+        int cluster_count = static_cast<int>(index.centroids.size());
+        index = ivf_rebuild(index, cluster_count);
         index.inserts_since_rebuild = 0;
     }
 }
@@ -135,12 +135,12 @@ bool ivf_delete(IVFIndex& ivf_index, int id) {
     return false;
 }
 
-IVFIndex ivf_rebuild(const IVFIndex& index, int nlist, int max_iters, unsigned seed) {
+IVFIndex ivf_rebuild(const IVFIndex& index, int cluster_count, int max_iters, unsigned seed) {
     std::vector<Vec> live_data;
     for (size_t i = 0; i < index.data.size(); i++) {
         if (!index.deleted[i]) {
             live_data.push_back(index.data[i]);
         }
     }
-    return build_ivf_index(live_data, nlist, max_iters, seed);
+    return build_ivf_index(live_data, cluster_count, max_iters, seed);
 }

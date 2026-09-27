@@ -4,6 +4,8 @@ A minimal vector database written from scratch in C++ — IVF (Inverted File Ind
 
 Built as a learning project to understand the mechanics behind real vector databases from first principles.
 
+Includes a semantic search demo built on [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch), a Character-Level GPT I trained separately — see [Semantic search demo](#semantic-search-demo) below.
+
 ## Features
 
 - Vector representation with L2 and cosine distance
@@ -17,6 +19,7 @@ Built as a learning project to understand the mechanics behind real vector datab
 - TCP server + CLI client — query, insert, and delete over the network with a simple text protocol
 - Benchmark suite measuring recall and speedup vs brute-force
 - 12 automated tests covering the whole pipeline
+- Semantic search demo: embeds words with a separately-trained GPT model and serves search over them through the same TCP server
 
 ## Architecture
 
@@ -31,24 +34,30 @@ src/
 ├── server_main.cpp    — starts the server with a built IVF index
 ├── client.cpp         — standalone CLI client
 ├── bench.cpp          — recall/speed benchmark
+├── gpt_search_main.cpp — starts the server with GPT word embeddings (see below)
 └── main.cpp           — I/O sanity check
 tests/test_all.cpp     — end-to-end test suite
+tools/                  — Python side of the semantic search demo
+├── gpt_model_copy.py   — copy of the GPT model class (unmodified logic)
+├── embed_corpus.py      — embeds Shakespeare's unique words, writes embeddings.bin
+├── query_client.py       — embeds a query and sends it to the server
+└── input.txt              — Shakespeare corpus (public domain)
 ```
 
 ## How IVF search works
 
-1. **Build**: run k-means on the dataset to get `nlist` centroids, then group every vector into an inverted list per centroid.
+1. **Build**: run k-means on the dataset to get `cluster_count` centroids, then group every vector into an inverted list per centroid.
 2. **Query**: compute the distance from the query to all centroids, pick the `nprobe` closest clusters, then brute-force search only within those clusters.
 
-This trades exactness for speed: a smaller `nprobe` means fewer clusters are searched (faster), but the true nearest neighbor might live in a cluster that wasn't checked (lower recall). Setting `nprobe = nlist` searches every cluster and is mathematically equivalent to brute-force.
+This trades exactness for speed: a smaller `nprobe` means fewer clusters are searched (faster), but the true nearest neighbor might live in a cluster that wasn't checked (lower recall). Setting `nprobe = cluster_count` searches every cluster and is mathematically equivalent to brute-force.
 
 ### Automatic rebuild
 
-Inserting doesn't touch the centroids, so cluster quality slowly degrades as more vectors are added — and deleted vectors keep occupying space until something removes them. `ivf_insert` tracks how many inserts have happened since the last rebuild and, once that reaches ~20% of the current dataset size, calls `ivf_rebuild`: it collects all non-deleted vectors and reruns `build_ivf_index` from scratch, producing fresh centroids and dropping tombstoned vectors entirely. A full rebuild costs `O(max_iters × N × nlist)` (same as the initial build), so it's deliberately infrequent rather than run on every insert.
+Inserting doesn't touch the centroids, so cluster quality slowly degrades as more vectors are added — and deleted vectors keep occupying space until something removes them. `ivf_insert` tracks how many inserts have happened since the last rebuild and, once that reaches ~20% of the current dataset size, calls `ivf_rebuild`: it collects all non-deleted vectors and reruns `build_ivf_index` from scratch, producing fresh centroids and dropping tombstoned vectors entirely. A full rebuild costs `O(max_iters × N × cluster_count)` (same as the initial build), so it's deliberately infrequent rather than run on every insert.
 
 ## Benchmark results
 
-10,000 random 64-dimensional vectors, `nlist=50`, `k=10`, averaged over 250 queries:
+10,000 random 64-dimensional vectors, `cluster_count=50`, `k=10`, averaged over 250 queries:
 
 | nprobe | recall | avg IVF time | avg brute-force time | speedup |
 |---|---|---|---|---|
@@ -60,7 +69,7 @@ Inserting doesn't touch the centroids, so cluster quality slowly degrades as mor
 | 40 | 97.9%  | 7487us | 8741us | 1.2x  |
 | 50 | 100%   | 9041us | 8395us | 0.9x  |
 
-`nprobe=50` (= `nlist`) hits exactly 100% recall — confirms the IVF search is a correct approximation of brute-force, not a different algorithm. Below full `nprobe`, there's a clear speed/recall trade-off: `nprobe=10` gets ~5x faster at ~63% recall, a reasonable operating point for many applications.
+`nprobe=50` (= `cluster_count`) hits exactly 100% recall — confirms the IVF search is a correct approximation of brute-force, not a different algorithm. Below full `nprobe`, there's a clear speed/recall trade-off: `nprobe=10` gets ~5x faster at ~63% recall, a reasonable operating point for many applications.
 
 ## Building and running
 
@@ -72,6 +81,7 @@ make run-tests  # builds and runs the test suite
 make bench      # builds the benchmark
 make server     # builds the server
 make client     # builds the client
+make gpt-search # builds the semantic search server (see below)
 make clean      # removes all built binaries
 ```
 
@@ -104,6 +114,35 @@ INSERT <dim floats>               -> "OK"
 DELETE <id>                       -> "OK" or "NOT FOUND"
 ```
 
+## Semantic search demo
+
+Word-level semantic search over Shakespeare, using embeddings from [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch) — a decoder-only Transformer (multi-head self-attention, trained from scratch) I built and trained separately.
+
+`tools/gpt_model_copy.py` is an unmodified copy of that project's model class (kept here so this repo has no import-path dependency on the other one). `embed_corpus.py` runs each unique word from Shakespeare's text through the model's blocks and final layer norm (skipping the vocabulary-logit layer), mean-pools the per-character representations into one 256-dim vector per word, and writes them in the same binary format `save_vectors` already uses — so the C++ side needs zero new parsing code.
+
+```bash
+# one-time setup: copy your own trained checkpoint
+mkdir -p tools/checkpoints
+cp /path/to/gpt-from-scratch/checkpoints/gpt_best_model.pt tools/checkpoints/
+
+# build the embeddings (uses the gpt project's venv, needs torch)
+cd tools
+/path/to/gpt-from-scratch/.venv/bin/python3 embed_corpus.py
+
+# start the search server
+cd ..
+make gpt-search
+./gpt_search_server &
+
+# query it
+cd tools
+/path/to/gpt-from-scratch/.venv/bin/python3 query_client.py king
+```
+
+Query and corpus words are embedded by the exact same function, so comparing them is meaningful — the query goes through the same forward pass as every word in the index.
+
+**A known limitation worth calling out:** because the model uses causal (left-to-right) attention and the final vector is a plain mean over all character positions, words that share a prefix end up with disproportionately similar vectors regardless of meaning (e.g. "apple" and "applied" score as similar). Early character positions carry little context in a causal model, so a shared prefix dominates the average. A bidirectional model, or pooling only the last token instead of averaging all of them, would reduce this effect.
+
 ## Known simplifications
 
 This is a learning project, not a production system. Deliberately left out:
@@ -112,3 +151,5 @@ This is a learning project, not a production system. Deliberately left out:
 - Single-threaded server — one client handled at a time
 - Delete is a tombstone flag between rebuilds, not immediate physical removal — space is only reclaimed at the next automatic (or manual) rebuild
 - Rebuild threshold (~20% growth) is a fixed heuristic, not configurable or adaptive to workload
+- The Python side (semantic search demo) has no automated tests, unlike the C++ core
+- The trained checkpoint isn't included (too large for this repo) — the demo needs your own, from [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch)
