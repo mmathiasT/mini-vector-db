@@ -1,25 +1,25 @@
 # mini-vector-db
 
-A minimal vector database written from scratch in C++ — IVF (Inverted File Index) approximate nearest neighbor search built on custom k-means clustering, with binary file persistence and a TCP server/client.
+A small vector database written from scratch in C++. It uses an IVF (Inverted File Index) with custom k-means clustering to find similar vectors fast, plus file storage and a TCP server/client.
 
-Built as a learning project to understand the mechanics behind real vector databases from first principles.
+I built this to learn how vector databases work, from the ground up.
 
-Includes a semantic search demo built on [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch), a Character-Level GPT I trained separately — see [Semantic search demo](#semantic-search-demo) below.
+It also has a semantic search demo, built on [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch), a Character-Level GPT I trained myself. See [Semantic search demo](#semantic-search-demo) below.
 
 ## Features
 
-- Vector representation with L2 and cosine distance
-- Exact brute-force k-NN search (baseline / ground truth)
-- K-means clustering implemented from scratch (Lloyd's algorithm)
-- IVF index: cluster-based approximate nearest neighbor search with a configurable `nprobe`
-- Insert into an existing index without rebuilding
-- Tombstone-based delete (marks vectors as deleted and excludes them from search, without shifting indices)
-- Automatic index rebuild: triggers every time ~20% new inserts accumulate, re-running k-means on the live (non-deleted) data to keep cluster quality from degrading and to reclaim space from deleted vectors
-- Binary persistence (save/load) for both raw vectors and the full IVF index, including delete flags
-- TCP server + CLI client — query, insert, and delete over the network with a simple text protocol
-- Benchmark suite measuring recall and speedup vs brute-force
-- 12 automated tests covering the whole pipeline
-- Semantic search demo: embeds words with a separately-trained GPT model and serves search over them through the same TCP server
+- Vectors with L2 and cosine distance
+- Exact brute-force k-NN search (the "correct answer" baseline)
+- K-means clustering from scratch (Lloyd's algorithm)
+- IVF index for fast approximate search, with a `nprobe` setting you can adjust
+- Insert into an existing index, no full rebuild needed
+- Soft delete (marks vectors as deleted, doesn't shift the index)
+- Auto rebuild: after ~20% growth, redoes k-means on live data to fix clusters and drop deleted vectors
+- Save/load for raw vectors and the full index, including delete flags
+- TCP server + CLI client for query/insert/delete
+- Benchmark comparing speed and accuracy against brute-force
+- 12 automated tests
+- Semantic search demo using GPT word embeddings
 
 ## Architecture
 
@@ -30,7 +30,7 @@ src/
 ├── io.h/.cpp          — binary save/load for raw vectors
 ├── kmeans.h/.cpp      — k-means clustering
 ├── ivf.h/.cpp         — IVF index: build, search, insert, delete, rebuild, persistence
-├── server.h/.cpp      — TCP server (QUERY / INSERT protocol)
+├── server.h/.cpp      — TCP server (QUERY / INSERT / DELETE protocol)
 ├── server_main.cpp    — starts the server with a built IVF index
 ├── client.cpp         — standalone CLI client
 ├── bench.cpp          — recall/speed benchmark
@@ -38,7 +38,7 @@ src/
 └── main.cpp           — I/O sanity check
 tests/test_all.cpp     — end-to-end test suite
 tools/                  — Python side of the semantic search demo
-├── gpt_model_copy.py   — copy of the GPT model class (unmodified logic)
+├── gpt_model_copy.py   — copy of the GPT model class (unmodified)
 ├── embed_corpus.py      — embeds Shakespeare's unique words, writes embeddings.bin
 ├── query_client.py       — embeds a query and sends it to the server
 └── input.txt              — Shakespeare corpus (public domain)
@@ -46,14 +46,14 @@ tools/                  — Python side of the semantic search demo
 
 ## How IVF search works
 
-1. **Build**: run k-means on the dataset to get `cluster_count` centroids, then group every vector into an inverted list per centroid.
-2. **Query**: compute the distance from the query to all centroids, pick the `nprobe` closest clusters, then brute-force search only within those clusters.
+1. **Build**: run k-means to get `cluster_count` centroids. Put every vector in the group of its closest centroid.
+2. **Query**: compare the query to all centroids, pick the `nprobe` closest ones, then search only inside those groups.
 
-This trades exactness for speed: a smaller `nprobe` means fewer clusters are searched (faster), but the true nearest neighbor might live in a cluster that wasn't checked (lower recall). Setting `nprobe = cluster_count` searches every cluster and is mathematically equivalent to brute-force.
+This trades correctness for speed. A smaller `nprobe` checks fewer groups — faster, but you might miss the real nearest neighbor (lower recall). `nprobe = cluster_count` checks every group, so it gives the same result as brute-force.
 
 ### Automatic rebuild
 
-Inserting doesn't touch the centroids, so cluster quality slowly degrades as more vectors are added — and deleted vectors keep occupying space until something removes them. `ivf_insert` tracks how many inserts have happened since the last rebuild and, once that reaches ~20% of the current dataset size, calls `ivf_rebuild`: it collects all non-deleted vectors and reruns `build_ivf_index` from scratch, producing fresh centroids and dropping tombstoned vectors entirely. A full rebuild costs `O(max_iters × N × cluster_count)` (same as the initial build), so it's deliberately infrequent rather than run on every insert.
+Inserting doesn't move the centroids, so clusters slowly get worse as more data comes in — and deleted vectors still take up space. `ivf_insert` counts inserts since the last rebuild. Once that count hits ~20% of the dataset size, it calls `ivf_rebuild`: takes all non-deleted vectors and reruns `build_ivf_index` from scratch, making fresh centroids and dropping deleted vectors for good. A rebuild costs as much as a full build (`O(max_iters × N × cluster_count)`), so it only happens now and then, not on every insert.
 
 ## Benchmark results
 
@@ -69,7 +69,7 @@ Inserting doesn't touch the centroids, so cluster quality slowly degrades as mor
 | 40 | 97.9%  | 7487us | 8741us | 1.2x  |
 | 50 | 100%   | 9041us | 8395us | 0.9x  |
 
-`nprobe=50` (= `cluster_count`) hits exactly 100% recall — confirms the IVF search is a correct approximation of brute-force, not a different algorithm. Below full `nprobe`, there's a clear speed/recall trade-off: `nprobe=10` gets ~5x faster at ~63% recall, a reasonable operating point for many applications.
+At `nprobe=50` (= `cluster_count`), recall is exactly 100% — this shows IVF search gives a correct approximation of brute-force, not a different algorithm. Below full `nprobe`, there's a clear trade-off: `nprobe=10` is ~5x faster at ~63% recall, a good setting for many cases.
 
 ## Building and running
 
@@ -85,7 +85,7 @@ make gpt-search # builds the semantic search server (see below)
 make clean      # removes all built binaries
 ```
 
-Or manually:
+Or by hand:
 
 ```bash
 g++ -std=c++17 -Wall src/main.cpp src/vector.cpp src/knn.cpp src/io.cpp src/kmeans.cpp src/ivf.cpp -o mini_vector_db
@@ -106,7 +106,7 @@ Server + client demo:
 
 ## Protocol
 
-The server accepts one command per TCP connection, as a single newline-terminated line:
+One command per TCP connection, sent as a single line ending in `\n`:
 
 ```
 QUERY <dim floats> <k> <nprobe>   -> space-separated list of nearest neighbor ids
@@ -116,9 +116,9 @@ DELETE <id>                       -> "OK" or "NOT FOUND"
 
 ## Semantic search demo
 
-Word-level semantic search over Shakespeare, using embeddings from [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch) — a decoder-only Transformer (multi-head self-attention, trained from scratch) I built and trained separately.
+Word-level search over Shakespeare's text, using embeddings from [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch) — a decoder-only Transformer I built and trained myself.
 
-`tools/gpt_model_copy.py` is an unmodified copy of that project's model class (kept here so this repo has no import-path dependency on the other one). `embed_corpus.py` runs each unique word from Shakespeare's text through the model's blocks and final layer norm (skipping the vocabulary-logit layer), mean-pools the per-character representations into one 256-dim vector per word, and writes them in the same binary format `save_vectors` already uses — so the C++ side needs zero new parsing code.
+`tools/gpt_model_copy.py` is an unchanged copy of that project's model class. It's copied here so this repo doesn't depend on the other one's file layout. `embed_corpus.py` runs each unique word through the model (up to the final layer norm, skipping the vocabulary layer), averages the per-character outputs into one 256-number vector per word, and saves them in the same binary format `save_vectors` already uses. So the C++ side needs no new code to read them.
 
 ```bash
 # one-time setup: copy your own trained checkpoint
@@ -139,17 +139,17 @@ cd tools
 /path/to/gpt-from-scratch/.venv/bin/python3 query_client.py king
 ```
 
-Query and corpus words are embedded by the exact same function, so comparing them is meaningful — the query goes through the same forward pass as every word in the index.
+The query and every word in the index go through the exact same embedding function, so comparing them makes sense.
 
-**A known limitation worth calling out:** because the model uses causal (left-to-right) attention and the final vector is a plain mean over all character positions, words that share a prefix end up with disproportionately similar vectors regardless of meaning (e.g. "apple" and "applied" score as similar). Early character positions carry little context in a causal model, so a shared prefix dominates the average. A bidirectional model, or pooling only the last token instead of averaging all of them, would reduce this effect.
+**Known limitation:** the model reads text left-to-right only (causal attention), and the final vector is just an average over all character positions. So words that share a prefix get very similar vectors, even if their meaning is different — e.g. "apple" and "applied" come out as similar. Early characters carry little context in this kind of model, so a shared prefix dominates the average. A model that reads both directions, or using only the last character's vector instead of averaging all of them, would fix this.
 
 ## Known simplifications
 
-This is a learning project, not a production system. Deliberately left out:
+This is a learning project, not a production system:
 
-- No authentication or encryption on the server — anyone who can reach the port can query/insert
-- Single-threaded server — one client handled at a time
-- Delete is a tombstone flag between rebuilds, not immediate physical removal — space is only reclaimed at the next automatic (or manual) rebuild
-- Rebuild threshold (~20% growth) is a fixed heuristic, not configurable or adaptive to workload
-- The Python side (semantic search demo) has no automated tests, unlike the C++ core
-- The trained checkpoint isn't included (too large for this repo) — the demo needs your own, from [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch)
+- No login or encryption — anyone who can reach the port can query/insert
+- One client at a time — the server is single-threaded
+- Delete just flags a vector until the next rebuild, it doesn't remove it right away
+- The rebuild threshold (~20% growth) is a fixed number, not adjustable
+- No automated tests for the Python side (semantic search demo)
+- The trained model checkpoint isn't included (too large) — bring your own from [gpt-from-scratch](https://github.com/mmathiasT/gpt-from-scratch)
