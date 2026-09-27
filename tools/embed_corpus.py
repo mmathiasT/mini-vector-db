@@ -15,7 +15,7 @@ model = GPTLanguageModel(
     checkpoint["dropout"],
 )
 model.load_state_dict(checkpoint["model_state_dict"])
-model.eval()    
+model.eval()
 
 stoi = checkpoint["stoi"]
 block_size = checkpoint["block_size"]
@@ -31,7 +31,6 @@ def get_sentence_embedding(text: str):
         raise ValueError(f"no encodable characters in: {text!r}")
 
     context = torch.tensor([ids], dtype=torch.long)
-
 
     with torch.no_grad():
         num_tokens = context.shape[1]
@@ -52,7 +51,6 @@ def get_sentence_embedding(text: str):
         token_repr = model.final_normalization(token_repr)
 
         token_repr_list = token_repr[0].tolist()
-        num_tokens = len(token_repr_list)
         n_embd = len(token_repr_list[0])
 
         embedding = []
@@ -60,8 +58,8 @@ def get_sentence_embedding(text: str):
             total = 0
             for token_vector in token_repr_list:
                 total += token_vector[coord]
-            embedding.append(total / num_tokens)    
-    
+            embedding.append(total / num_tokens)
+
     return embedding
 
 
